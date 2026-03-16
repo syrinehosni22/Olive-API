@@ -9,5 +9,5 @@ router.post(
   upload.single("rneFile"),
   authController.registerWithPayment
 );
-
+router.post('/login', authController.login);
 module.exports = router;
