@@ -3,7 +3,7 @@ const connectDB = require("./config/db");
 const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
-
+const userRoutes=require("./routes/user")
 const app = express();
 
 connectDB();
@@ -24,7 +24,7 @@ app.use("/uploads", express.static("uploads"));
 
 // Routes
 app.use("/api/auth", authRoutes);
-
+app.use("/api/user", userRoutes);
 app.listen(5000, () => {
   console.log("Server running on port 5000");
 });
