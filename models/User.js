@@ -30,18 +30,36 @@ const userSchema = new mongoose.Schema({
   firstName: String,
   name: String,
   phone: String,
-  companyName: String,
+  companyName: {
+    type: String,
+    trim: true
+  },
+  registrationNumber: { 
+    type: String,
+    trim: true
+  },
 
-  // SELLER DATA
+  // SELLER DATA (Synchronized with SellerData Interface)
   seller: {
-    registrationNumber: String,
-    rneFile: String,
+    brandName: String,
+    producerType: {
+      type: String,
+      enum: ["Producteur", "Collecteur", "Moulin", "Exportateur"],
+    },
     region: String,
     delegation: String,
-    producerName: String,
     millName: String,
-    capacity: Number,
-    altitude: String
+    millType: {
+      type: String,
+      enum: ["Traditionnel", "Chaine Continue", "Super-Presse"],
+    },
+    capacity: {
+      type: Number, // Match frontend type: number
+      default: 0
+    },
+    altitude: Number, // Changed from String to Number to match frontend logic
+    taxId: String,    // Added to match interface
+    rneFile: String   // Kept from previous version for document storage
   },
 
   // BUYER DATA
@@ -69,15 +87,13 @@ const userSchema = new mongoose.Schema({
 
 // --- MIDDLEWARE: Hash password before saving ---
 userSchema.pre("save", async function (next) {
-  // Only hash the password if it has been modified (or is new)
   if (!this.isModified("password")) return next();
-
   try {
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.getSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (err) {
-    console.log(err);
+    next(err);
   }
 });
 
