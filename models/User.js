@@ -7,7 +7,6 @@ const userSchema = new mongoose.Schema({
     enum: ["vendeur", "acheteur", "prestataire"],
     required: true
   },
-
   planId: {
     type: String,
     required: true
@@ -39,27 +38,21 @@ const userSchema = new mongoose.Schema({
     trim: true
   },
 
-  // SELLER DATA (Synchronized with SellerData Interface)
+  // SELLER DATA
   seller: {
-    brandName: String,
-    producerType: {
+    region: {
       type: String,
-      enum: ["Producteur", "Collecteur", "Moulin", "Exportateur"],
+      enum: ["Nord-ouest", "Centre", "Sud", "Sahel", "Cap Bon"]
     },
-    region: String,
     delegation: String,
+    producerName: String,
     millName: String,
-    millType: {
-      type: String,
-      enum: ["Traditionnel", "Chaine Continue", "Super-Presse"],
-    },
     capacity: {
-      type: Number, // Match frontend type: number
+      type: Number,
       default: 0
     },
-    altitude: Number, // Changed from String to Number to match frontend logic
-    taxId: String,    // Added to match interface
-    rneFile: String   // Kept from previous version for document storage
+    altitude: Number,
+    rneFile: String 
   },
 
   // BUYER DATA
@@ -85,21 +78,24 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-// --- MIDDLEWARE: Hash password before saving ---
+// --- MIDDLEWARE: Hachage du mot de passe avant sauvegarde ---
 userSchema.pre("save", async function (next) {
+  // On ne hache que si le mot de passe est nouveau ou modifié
   if (!this.isModified("password")) return next();
+  
   try {
-    const salt = await bcrypt.getSalt(10);
+    const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    next();
   } catch (err) {
-    next(err);
+    console.log(err);
   }
 });
 
-// --- METHOD: Compare password for login ---
+// --- MÉTHODE: Comparer le mot de passe pour le login ---
+// Cette méthode est attachée à chaque instance de "User"
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// IMPORTANT: Toujours exporter le modèle APRÈS avoir défini les méthodes et middlewares
 module.exports = mongoose.model("User", userSchema);

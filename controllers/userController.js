@@ -59,3 +59,67 @@ exports.updateProfile = async (req, res) => {
     res.status(400).json({ message: "Erreur lors de la mise à jour", error: error.message });
   }
 };
+
+// @desc    Get all providers for the address book
+// @route   GET /api/users/providers
+// @access  Public (ou Private selon votre besoin)
+exports.getProviders = async (req, res) => {
+  try {
+    // On filtre par rôle "prestataire"
+    // On sélectionne uniquement les champs utiles pour l'annuaire
+    const providers = await User.find({ role: "prestataire" })
+      .select("firstName name companyName serviceType region proEmail phone website description")
+      .sort({ companyName: 1 }); // Tri alphabétique par nom de société
+
+    res.status(200).json(providers);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Erreur lors de la récupération des prestataires", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Get all users (Admin only)
+// @route   GET /api/users
+// @access  Private/Admin
+exports.getAllUsers = async (req, res) => {
+  try {
+    // Récupère tous les utilisateurs sauf les mots de passe
+    const users = await User.find({}).select("-password").sort({ createdAt: -1 });
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Erreur lors de la récupération de tous les utilisateurs", 
+      error: error.message 
+    });
+  }
+};
+
+// @desc    Update specific user (Admin only)
+// @route   PATCH /api/users/:id/status
+// @access  Private/Admin
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // On peut ici autoriser la modification du statut, du rôle, etc.
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { $set: { status: status } },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    res.status(400).json({ 
+      message: "Erreur lors de la mise à jour de l'utilisateur", 
+      error: error.message 
+    });
+  }
+};
