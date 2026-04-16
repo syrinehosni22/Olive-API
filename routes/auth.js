@@ -2,26 +2,41 @@ const express = require("express");
 const router = express.Router();
 
 const authController = require("../controllers/authController");
-const upload = require("../middleware/upload");
 
-// --- PUBLIC ROUTES ---
+// ✅ nouveau multer (version complète)
+const {
+  uploadFields,
+  multerErrorHandler
+} = require("../middleware/multer");
 
-// Registration with file upload
+
+// ==========================================
+// REGISTER (avec upload fichier RNE)
+// ==========================================
 router.post(
   "/register-with-payment",
-  upload.single("rneFile"),
+  uploadFields,          // 📂 support rneFile + extensible
+  multerErrorHandler,    // 🚨 gestion erreurs
   authController.registerWithPayment
 );
 
-// Login: Sets the HttpOnly cookie
+
+// ==========================================
+// LOGIN
+// ==========================================
 router.post('/login', authController.login);
 
-// --- PERSISTENCE & SESSION ROUTES ---
 
-// Get current user: React calls this in App.tsx useEffect to persist state
+// ==========================================
+// GET CURRENT USER
+// ==========================================
 router.get('/me', authController.getMe);
 
-// Logout: Clears the HttpOnly cookie
+
+// ==========================================
+// LOGOUT
+// ==========================================
 router.post('/logout', authController.logout);
+
 
 module.exports = router;
