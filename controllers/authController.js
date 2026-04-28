@@ -1,17 +1,49 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
+
+// Utilitaire pour sauvegarder une image/fichier Base64
+const saveBase64File = (base64String, subFolder) => {
+  if (!base64String || !base64String.startsWith("data:")) return null;
+
+  // Extraire l'extension et les données
+  const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) return null;
+
+  const extension = matches[1].split("/")[1]; // ex: pdf, png, jpg
+  const data = Buffer.from(matches[2], "base64");
+  
+  const fileName = `${subFolder}_${Date.now()}_${Math.floor(Math.random() * 1000)}.${extension}`;
+  const uploadDir = path.join(__dirname, "../uploads/", subFolder);
+
+  // Créer le dossier s'il n'existe pas
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const filePath = path.join(uploadDir, fileName);
+  fs.writeFileSync(filePath, data);
+
+  // Retourner le chemin relatif pour la base de données
+  return `/uploads/${subFolder}/${fileName}`;
+};
 
 // --- 1. REGISTER WITH PAYMENT ---
 exports.registerWithPayment = async (req, res) => {
   try {
     const body = req.body;
+        console.log("body",body)
+
     const { role } = body;
     let roleData = {};
 
-    // Map fields strictly according to the Mongoose Schema
     if (role === "vendeur") {
+      // Sauvegarde du fichier RNE s'il est envoyé en Base64
+      const rnePath = saveBase64File(body.rneFile, "rne_docs");
+      
       roleData.seller = {
-        rneFile: req.file ? req.file.filename : null,
+        rneFile: rnePath, // Stocke l'URL relative (/uploads/rne_docs/file.pdf)
         region: body.region,
         delegation: body.delegation,
         producerName: body.producerName,
@@ -45,11 +77,13 @@ exports.registerWithPayment = async (req, res) => {
       password: body.password,
       phone: body.phone,
       companyName: body.companyName,
-      registrationNumber: body.registrationNumber, // Corrected: Schema root level
+      registrationNumber: body.registrationNumber,
       ...roleData,
     });
 
     await user.save();
+    
+    // Simuler un lien de paiement
     const paymentUrl = `https://payment-platform.com/pay/${user._id}`;
 
     res.json({ success: true, paymentUrl });
@@ -63,8 +97,6 @@ exports.registerWithPayment = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Find user (Schema includes all fields by default)
     const user = await User.findOne({ email });
 
     if (!user || !(await user.comparePassword(password))) {
@@ -85,62 +117,44 @@ exports.login = async (req, res) => {
       path: "/"
     });
 
-    // Convert to object and cleanup
     const userObject = user.toObject();
     delete userObject.password;
     userObject.id = userObject._id; 
 
     res.json({
       success: true,
-      user: userObject // Includes seller, buyer, or provider objects
+      user: userObject 
     });
   } catch (error) {
     console.error("Login Error:", error);
-    res.status(500).json({ message: "Erreur serveur lors de la connexion" });
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
-// --- 3. GET ME (Persistence Check) ---
+// --- 3. GET ME ---
 exports.getMe = async (req, res) => {
   try {
     const token = req.cookies.token;
     if (!token) return res.status(401).json({ message: "Not authenticated" });
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || "your_fallback_secret_key",
-    );
-
-    // FIX: select("-password") ensures ALL other fields (seller/buyer/provider) are returned
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your_fallback_secret_key");
     const user = await User.findById(decoded.userId).select("-password");
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.json({
-      success: true,
-      user: user
-    });
+    res.json({ success: true, user });
   } catch (error) {
-    console.error("GetMe Error:", error);
     res.status(401).json({ message: "Invalid token" });
   }
 };
 
 // --- 4. LOGOUT ---
 exports.logout = (req, res) => {
-  try {
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
-
-    return res.status(200).json({ 
-      success: true, 
-      message: "Logged out successfully" 
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+  res.json({ success: true, message: "Logged out" });
 };

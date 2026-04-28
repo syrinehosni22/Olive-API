@@ -4,250 +4,212 @@ const fs = require('fs');
 const path = require('path');
 
 // ==============================
-// 🛠 UTILS
+// 🛠 UTILS PRIVÉS
 // ==============================
 
 /**
- * Décode une chaîne Base64 et l'enregistre sur le disque
- * @param {string} base64String - Le contenu du fichier
- * @param {string} subFolder - Sous-dossier (ex: 'documents')
- * @returns {string|null} - Le chemin relatif du fichier enregistré
+ * Décode une chaîne Base64 et l'enregistre sur le disque.
+ * Si la chaîne est déjà une URL (ne commence pas par data:), elle est retournée telle quelle.
  */
 const saveBase64 = (base64String, subFolder = 'products') => {
-  if (!base64String || !base64String.startsWith('data:')) return null;
+    if (!base64String) return null;
+    
+    // Si c'est déjà une URL, on ne fait rien
+    if (!base64String.startsWith('data:')) return base64String;
 
-  try {
-    // 1. Extraire l'extension et les données
-    const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return null;
+    try {
+        // 1. Extraire l'extension et les données
+        const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (!matches || matches.length !== 3) return null;
 
-    const extension = matches[1].split('/')[1] === 'pdf' ? 'pdf' : 'jpg';
-    const data = Buffer.from(matches[2], 'base64');
+        const mimeType = matches[1];
+        const extension = mimeType.split('/')[1] === 'pdf' ? 'pdf' : 'jpg';
+        const data = Buffer.from(matches[2], 'base64');
 
-    // 2. Créer les dossiers s'ils n'existent pas
-    const uploadDir = path.join(__dirname, '../uploads', subFolder);
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+        // 2. Créer les dossiers s'ils n'existent pas
+        const uploadDir = path.join(__dirname, '../uploads', subFolder);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        // 3. Générer un nom unique
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}.${extension}`;
+        const filePath = path.join(uploadDir, fileName);
+
+        // 4. Écrire le fichier physiquement
+        fs.writeFileSync(filePath, data);
+
+        // Retourner le chemin relatif pour la DB
+        return `uploads/${subFolder}/${fileName}`;
+    } catch (error) {
+        console.error("Erreur critique saveBase64:", error);
+        return null;
     }
-
-    // 3. Générer un nom unique
-    const fileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}.${extension}`;
-    const filePath = path.join(uploadDir, fileName);
-
-    // 4. Écrire le fichier
-    fs.writeFileSync(filePath, data);
-
-    // Retourner le chemin relatif pour la DB
-    return `uploads/${subFolder}/${fileName}`;
-  } catch (error) {
-    console.error("Erreur saveBase64:", error);
-    return null;
-  }
 };
 
-const cleanObject = (obj) => {
-  return Object.fromEntries(
-    Object.entries(obj || {}).filter(([_, v]) => v !== undefined)
-  );
-};
+/**
+ * Parcourt l'objet de données et remplace les Base64 par des URLs pour tous les champs connus
+ */
+const processAllFiles = (data) => {
+    if (!data) return data;
 
-// ==========================================
-// 1. CRÉER (Accepte Base64)
-// ==========================================
-exports.addProduct = async (req, res) => {
-  try {
-    let data = { ...req.body };
-
-    // 📂 Traitement des fichiers Base64 (si présents dans l'objet imbriqué)
-    // On mappe les champs envoyés par le front en Base64 vers des liens fichiers
     if (data.traceability?.fileUrlTraceabilite) {
-      data.traceability.fileUrlTraceabilite = saveBase64(data.traceability.fileUrlTraceabilite);
+        data.traceability.fileUrlTraceabilite = saveBase64(data.traceability.fileUrlTraceabilite, 'traceability');
     }
     if (data.physicoChimique?.fileUrlAnalyse) {
-      data.physicoChimique.fileUrlAnalyse = saveBase64(data.physicoChimique.fileUrlAnalyse);
+        data.physicoChimique.fileUrlAnalyse = saveBase64(data.physicoChimique.fileUrlAnalyse, 'analysis');
     }
     if (data.organoleptique?.fileUrlPanelTest) {
-      data.organoleptique.fileUrlPanelTest = saveBase64(data.organoleptique.fileUrlPanelTest);
+        data.organoleptique.fileUrlPanelTest = saveBase64(data.organoleptique.fileUrlPanelTest, 'panel-tests');
     }
     if (data.purete?.fileUrlPurete) {
-      data.purete.fileUrlPurete = saveBase64(data.purete.fileUrlPurete);
+        data.purete.fileUrlPurete = saveBase64(data.purete.fileUrlPurete, 'purity');
     }
-
-    const newProduct = new Product(data);
-    const savedProduct = await newProduct.save();
-
-    // 🔔 Notification
-    const notificationCommunaute = new Notification({
-      recipient: null,
-      type: "OFFRE_MATCH",
-      title: "Nouveau lot disponible",
-      message: `Un nouveau lot de ${data.physicoChimique?.variety || "produit"} vient d'être publié.`,
-      link: "/market",
-      isRead: false
-    });
-
-    await notificationCommunaute.save();
-
-    const io = req.app.get('socketio');
-    if (io) io.to("buyers").emit('newNotification', notificationCommunaute);
-
-    res.status(201).json(savedProduct);
-
-  } catch (err) {
-    console.log(err)
-    res.status(400).json({ message: "Erreur lors de l'ajout", error: err.message });
-  }
+    if (data.securite?.fileUrlSecurite) {
+        data.securite.fileUrlSecurite = saveBase64(data.securite.fileUrlSecurite, 'security');
+    }
+    // Ajout pour les documents d'export (objet dynamique)
+    if (data.documentsExport) {
+        Object.keys(data.documentsExport).forEach(key => {
+            if (data.documentsExport[key] && data.documentsExport[key].startsWith('data:')) {
+                data.documentsExport[key] = saveBase64(data.documentsExport[key], 'exports');
+            }
+        });
+    }
+    return data;
 };
 
 // ==========================================
-// 5. UPDATE (Accepte Base64)
+// 1. CRÉER UN PRODUIT
+// ==========================================
+exports.addProduct = async (req, res) => {
+    try {
+        let data = processAllFiles({ ...req.body });
+
+        const newProduct = new Product(data);
+        const savedProduct = await newProduct.save();
+
+        // 🔔 Notification Globale (Nouveau Lot)
+        const notification = new Notification({
+            recipient: null,
+            type: "OFFRE_MATCH",
+            title: "Nouveau lot disponible",
+            message: `Un nouveau lot de ${data.physicoChimique?.variety || "Huile d'olive"} est en ligne.`,
+            link: "/market",
+            isRead: false
+        });
+        await notification.save();
+
+        const io = req.app.get('socketio');
+        if (io) io.to("buyers").emit('newNotification', notification);
+
+        res.status(201).json(savedProduct);
+    } catch (err) {
+        console.error("Add Error:", err);
+        res.status(400).json({ message: "Erreur lors de l'ajout", error: err.message });
+    }
+};
+
+// ==========================================
+// 2. MODIFIER UN PRODUIT
 // ==========================================
 exports.updateProduct = async (req, res) => {
-  try {
-    const oldProduct = await Product.findById(req.params.id);
-    if (!oldProduct) return res.status(404).json({ message: "Produit non trouvé" });
+    try {
+        const oldProduct = await Product.findById(req.params.id);
+        if (!oldProduct) return res.status(404).json({ message: "Produit non trouvé" });
 
-    let updateData = req.body; // On garde la structure imbriquée
-    console.log(req.body)
+        // Traitement des fichiers (ne traite que les nouveaux Base64)
+        let updateData = processAllFiles({ ...req.body });
 
-    // 📂 Traitement Base64 : On n'écrase que si un nouveau Base64 est envoyé
-    if (updateData.traceability?.fileUrlTraceabilite?.startsWith('data:')) {
-      updateData.traceability.fileUrlTraceabilite = saveBase64(updateData.traceability.fileUrlTraceabilite);
+        const updatedProduct = await Product.findByIdAndUpdate(
+            req.params.id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
+
+        // 🔔 Notification si le statut change (ex: Validé par Admin)
+        if (updateData.status && updateData.status !== oldProduct.status) {
+            const statusNotif = new Notification({
+                recipient: updatedProduct.sellerId,
+                type: "STATUS_UPDATE",
+                title: "Mise à jour du statut",
+                message: `Votre lot ${updatedProduct.traceability?.lotNumber || ""} est désormais : ${updateData.status}`,
+                link: "/inventory",
+                isRead: false
+            });
+            await statusNotif.save();
+            
+            const io = req.app.get('socketio');
+            if (io) io.to(updatedProduct.sellerId.toString()).emit('newNotification', statusNotif);
+        }
+
+        res.status(200).json(updatedProduct);
+    } catch (err) {
+        console.error("Update Error:", err);
+        res.status(400).json({ message: "Erreur modification", error: err.message });
     }
-    if (updateData.physicoChimique?.fileUrlAnalyse?.startsWith('data:')) {
-      updateData.physicoChimique.fileUrlAnalyse = saveBase64(updateData.physicoChimique.fileUrlAnalyse);
-    }
-    if (updateData.organoleptique?.fileUrlPanelTest?.startsWith('data:')) {
-      updateData.organoleptique.fileUrlPanelTest = saveBase64(updateData.organoleptique.fileUrlPanelTest);
-    }
-    if (updateData.purete?.fileUrlPurete?.startsWith('data:')) {
-      updateData.purete.fileUrlPurete = saveBase64(updateData.purete.fileUrlPurete);
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
-
-    // 🔔 Logique Notifications Statut
-    if (req.body.status && req.body.status !== oldProduct.status) {
-      // ... (ton code de notification reste identique)
-      const io = req.app.get('socketio');
-      // Envoi socket io...
-    }
-
-    res.status(200).json(updatedProduct);
-
-  } catch (err) {
-    res.status(400).json({ message: "Erreur modification", error: err.message });
-  }
-}
+};
 
 // ==========================================
-// 2. LIRE (GET ALL + FILTRES AVANCÉS)
+// 3. LIRE TOUS LES PRODUITS (AVEC FILTRES)
 // ==========================================
 exports.getAllProducts = async (req, res) => {
-  try {
-    const filters = req.query;
-    let query = {};
+    try {
+        const { variety, campaign, acidityMax, status, port, isVerified } = req.query;
+        let query = {};
 
-    // 🔍 filtres avancés marketplace
-    if (filters.variety)
-      query["traceability.variety"] = filters.variety;
+        if (variety) query["physicoChimique.variety"] = variety;
+        if (campaign) query["traceability.campagneOleicole"] = campaign;
+        if (acidityMax) query["physicoChimique.aciditeLibre"] = { $lte: Number(acidityMax) };
+        if (status) query.status = status;
+        if (port) query["logistique.port"] = port;
+        if (isVerified) query["verification.isSellerVerified"] = isVerified === "true";
 
-    if (filters.campaign)
-      query["traceability.campaign"] = filters.campaign;
-
-    if (filters.acidityMax)
-      query["physicoChimique.acidity"] = { $lte: Number(filters.acidityMax) };
-
-    if (filters.polyphenols)
-      query["qualiteCommerciale.polyphenols"] = filters.polyphenols;
-
-    if (filters.incoterm)
-      query["logistique.incoterm"] = filters.incoterm;
-
-    if (filters.port)
-      query["logistique.port"] = filters.port;
-
-    if (filters.status)
-      query.status = filters.status;
-
-    if (filters.isVerified)
-      query["trust.isVerifiedSeller"] = filters.isVerified === "true";
-
-    const products = await Product.find(query)
-      .sort({ createdAt: -1 });
-
-    res.status(200).json(products);
-
-  } catch (err) {
-    res.status(500).json({
-      message: "Erreur serveur",
-      error: err.message
-    });
-  }
+        const products = await Product.find(query).sort({ createdAt: -1 });
+        res.status(200).json(products);
+    } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+    }
 };
 
 // ==========================================
-// 3. LIRE PAR ID
+// 4. LIRE PAR ID
 // ==========================================
 exports.getProductById = async (req, res) => {
-  try {
-    const product = await Product.findById(req.params.id);
-
-    if (!product)
-      return res.status(404).json({ message: "Produit non trouvé" });
-
-    res.status(200).json(product);
-
-  } catch (err) {
-    res.status(500).json({
-      message: "Erreur récupération",
-      error: err.message
-    });
-  }
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ message: "Produit non trouvé" });
+        res.status(200).json(product);
+    } catch (err) {
+        res.status(500).json({ message: "Erreur récupération", error: err.message });
+    }
 };
 
 // ==========================================
-// 4. PRODUITS PAR VENDEUR
+// 5. PRODUITS PAR VENDEUR
 // ==========================================
 exports.getProductsBySeller = async (req, res) => {
-  try {
-    const products = await Product.find({
-      sellerId: req.params.sellerId
-    }).sort({ createdAt: -1 });
-
-    res.status(200).json(products);
-
-  } catch (err) {
-    res.status(500).json({
-      message: "Erreur serveur",
-      error: err.message
-    });
-  }
+    try {
+        const products = await Product.find({ sellerId: req.params.sellerId }).sort({ createdAt: -1 });
+        res.status(200).json(products);
+    } catch (err) {
+        res.status(500).json({ message: "Erreur serveur", error: err.message });
+    }
 };
 
-
 // ==========================================
-// 6. DELETE
+// 6. SUPPRIMER
 // ==========================================
 exports.deleteProduct = async (req, res) => {
-  try {
-    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ message: "Produit non trouvé" });
 
-    if (!deletedProduct)
-      return res.status(404).json({ message: "Produit non trouvé" });
-
-    res.status(200).json({
-      message: "Produit supprimé avec succès"
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      message: "Erreur suppression",
-      error: err.message
-    });
-  }
+        // Optionnel : Supprimer les fichiers physiques ici avec fs.unlinkSync si nécessaire
+        
+        await Product.findByIdAndDelete(req.params.id);
+        res.status(200).json({ message: "Produit supprimé avec succès" });
+    } catch (err) {
+        res.status(500).json({ message: "Erreur suppression", error: err.message });
+    }
 };

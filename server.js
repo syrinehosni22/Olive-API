@@ -19,7 +19,21 @@ const productRoutes = require("./routes/products");
 const messageRoutes = require("./routes/messages");
 const buyRequestRoutes = require("./routes/buyRequest");
 const notificationRoutes = require("./routes/notificationRoutes"); 
+const fs = require("fs"); // <--- 1. AJOUTER ICI (si pas déjà fait)
 
+// --- IMPORT DES MODÈLES ---
+// ... vos imports
+
+// --- CONFIGURATION DES DOSSIERS D'UPLOADS ---
+// <--- 2. PLACER LE BLOC EXACTEMENT ICI
+const uploadDirs = ["uploads/rne_docs", "uploads/products", "uploads/messages"];
+uploadDirs.forEach(dir => {
+  const fullPath = path.join(__dirname, dir);
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+    console.log(`📁 Created directory: ${dir}`);
+  }
+});
 const app = express();
 
 // --- CONFIGURATION SOCKET.IO ---
@@ -49,9 +63,8 @@ app.use(cors({
 /** * CRITIQUE : Augmentation de la limite de taille pour le Base64 
  * Autorise jusqu'à 50 Mo pour que les fichiers PDF/Images ne soient pas rejetés (Error 413)
  */
-app.use(express.json({ limit: "1000mb" }));
-app.use(express.urlencoded({ limit: "1000mb", extended: true }));
-
+app.use(express.json({ limit: "1024mb" }));
+app.use(express.urlencoded({ limit: '1024mb', extended: true, parameterLimit: 5000000000 }));
 // Rendre le dossier uploads public pour l'affichage des images/fichiers
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

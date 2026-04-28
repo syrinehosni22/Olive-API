@@ -3,11 +3,6 @@ const router = express.Router();
 
 const productCtrl = require('../controllers/productController');
 
-// ✅ IMPORT MULTER
-const {
-  uploadFields,
-  multerErrorHandler
-} = require('../middleware/multer');
 
 
 // ==========================================

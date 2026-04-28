@@ -68,7 +68,7 @@ exports.getProviders = async (req, res) => {
     // On filtre par rôle "prestataire"
     // On sélectionne uniquement les champs utiles pour l'annuaire
     const providers = await User.find({ role: "prestataire" })
-      .select("firstName name companyName serviceType region proEmail phone website description")
+      .select("firstName name companyName provider region proEmail phone website description")
       .sort({ companyName: 1 }); // Tri alphabétique par nom de société
 
     res.status(200).json(providers);

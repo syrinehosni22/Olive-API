@@ -3,11 +3,7 @@ const router = express.Router();
 
 const authController = require("../controllers/authController");
 
-// ✅ nouveau multer (version complète)
-const {
-  uploadFields,
-  multerErrorHandler
-} = require("../middleware/multer");
+
 
 
 // ==========================================
@@ -15,8 +11,6 @@ const {
 // ==========================================
 router.post(
   "/register-with-payment",
-  uploadFields,          // 📂 support rneFile + extensible
-  multerErrorHandler,    // 🚨 gestion erreurs
   authController.registerWithPayment
 );
 

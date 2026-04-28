@@ -13,7 +13,7 @@ const productSchema = new mongoose.Schema(
     // 1. TRAÇABILITÉ & RÉCOLTE
     // =========================
     traceability: {
-      campagneOleicole: { type: String, required: true }, // ex: 2024/2025
+      campagneOleicole: { type: String, required: true },
       lotNumber: { type: String, required: true, unique: true },
       dateRecolte: Date,
       dateExtraction: Date,
@@ -21,11 +21,11 @@ const productSchema = new mongoose.Schema(
         type: String,
         enum: [
           "Manuelle",
-          "Récolte par gaule (bâtonnage)", // <-- Doit être identique au frontend
+          "Récolte par gaule (bâtonnage)",
           "Récolte avec filets au sol",
-          "Récolte mécanique avec peignes",
-          "Récolte mécanique par vibreur",
-          "Récolte entièrement mécanisée",
+          "Récolte mécanique avec peignes ou vibreurs portatifs",
+          "Récolte mécanique par vibreur de tronc",
+          "Récolte entièrement mécanisée (oliveraies intensives)",
         ],
       },
       typeIrrigation: {
@@ -61,9 +61,18 @@ const productSchema = new mongoose.Schema(
       },
       stockage: {
         temperature: { type: String, default: "14-18 °C" },
-        recipients: { type: String, enum: ["Inox", "Verre foncé"] },
-        conditions: [String], // ["Abri de la lumière"]
+        recipients: {
+          type: String,
+          enum: [
+            "Récipients en Inox",
+            "Récipients en Verre foncé",
+            "Citernes souples",
+            "IBC",
+          ],
+        },
+        conditions: [String],
       },
+      fileUrlTraceabilite: { type: String }, // Stocke l'URL du fichier
     },
 
     // =========================
@@ -79,7 +88,7 @@ const productSchema = new mongoose.Schema(
           "Zarrazi",
           "Chemchali",
           "Koroneiki",
-          "Sayali",
+          "Sayali / Tounsi",
           "Frantoio",
           "Leccino",
           "Coratina",
@@ -94,8 +103,8 @@ const productSchema = new mongoose.Schema(
         type: String,
         enum: ["Vierge Extra", "Vierge", "Lampante"],
       },
-      aciditeLibre: Number, // % acide oléique
-      indicePeroxyde: Number, // meq O2/kg
+      aciditeLibre: Number,
+      indicePeroxyde: Number,
       absorbanceUV: {
         k232: Number,
         k270: Number,
@@ -103,7 +112,7 @@ const productSchema = new mongoose.Schema(
       },
       humiditeMatieresVolatiles: Number,
       impuretesInsolubles: Number,
-      fileUrlAnalyse: String, // Bulletin d'analyse obligatoire
+      fileUrlAnalyse: { type: String }, // Stocke l'URL du bulletin
     },
 
     // =========================
@@ -112,30 +121,78 @@ const productSchema = new mongoose.Schema(
     organoleptique: {
       medianeDefauts: { type: Number, default: 0 },
       medianeFruite: Number,
-      attributsNegatifs: [String], // ["Rance", "Chômé", etc.]
-      attributsPositifs: [String], // ["Fruité vert", "Amer intense", "Équilibrée"]
-      fileUrlPanelTest: String,
+      attributsNegatifs: [
+        {
+          type: String,
+          enum: [
+            "Chômé/lies",
+            "Moisi-humidité-terre",
+            "Vineux - Vinaigré - Acide – Aigre",
+            "Olive gelée (Bois humide)",
+            "Rance",
+            "Métallique",
+            "Foin sec",
+            "Ver",
+            "Grossier",
+            "Saumure",
+            "Cuit ou brûlé",
+            "Margines Sparte",
+            "Concombre",
+            "Lubrifiants",
+          ],
+        },
+      ],
+      attributsPositifs: [
+        {
+          type: String,
+          enum: [
+            "Fruité",
+            "Fruité mûr",
+            "Fruité vert",
+            "Fruité léger",
+            "Fruité moyen",
+            "Fruité intense",
+            "Fruité mûr léger",
+            "Fruité mûr moyen",
+            "Fruité mûr intense",
+            "Fruité vert léger",
+            "Fruité vert moyen",
+            "Fruité vert intense",
+            "Amer léger",
+            "Amer moyen",
+            "Amer intense",
+            "Piquant léger",
+            "Piquant moyen",
+            "Piquant intense",
+            "Huile équilibrée",
+            "Huile douce",
+          ],
+        },
+      ],
+      fileUrlPanelTest: { type: String }, // Stocke l'URL
     },
 
     // =========================
-    // 4. PURETÉ (Anti-Fraude)
+    // 4. PURETÉ & QUALITÉ COMMERCIALE
     // =========================
     purete: {
       acidesGras: {
-        oleique: Number, // 55-83%
+        oleique: Number,
         linoleique: Number,
         palmitique: Number,
       },
       sterols: {
-        totaux: Number, // >= 1000 mg/kg
-        betaSitosterol: Number, // >= 93%
+        totaux: Number,
+        betaSitosterol: Number,
       },
       erythrodiolUvaol: Number,
       ciresWaxes: Number,
       alkylEsters: Number,
       ethylEstersFAEE: Number,
       pointFumee: Number,
-      fileUrlPurete: String,
+      polyphenolsTotaux: { type: String }, // Changé de Number à String
+      tocopherols: { type: String },
+      fileUrlPurete: { type: String }, // Stocke l'URL
     },
 
     // =========================
@@ -143,13 +200,14 @@ const productSchema = new mongoose.Schema(
     // =========================
     securite: {
       pesticides: { type: Boolean, default: false },
-      metauxLourds: { type: Boolean, default: false },
-      moshMoah: { type: Boolean, default: false },
+      metauxLourds: [String],
+      contaminants: [String],
       microbiologie: {
         levuresMoisissures: String,
         salmonella: String,
+        eColi: String,
       },
-      fileUrlSecurite: String,
+      fileUrlSecurite: { type: String }, // Stocke l'URL
     },
 
     // =========================
@@ -160,10 +218,11 @@ const productSchema = new mongoose.Schema(
         type: String,
         enum: ["Bouteilles", "Semi Vrac", "Vrac"],
       },
-      packagingDetail: String, // ex: "Bouteille Verre 750ml"
+      packagingDetail: { type: String },
       totalQuantity: { type: Number, required: true },
       moq: { type: Number, default: 0 },
       price: { type: Number, required: true },
+      currency: { type: String, default: "EUR" },
       incoterm: {
         type: String,
         enum: [
@@ -184,29 +243,44 @@ const productSchema = new mongoose.Schema(
         type: String,
         enum: ["Radès", "La Goulette", "Bizerte", "Sousse", "Sfax", "Gabès"],
       },
-      photos: [String],
+      photosProduit: [String], // Tableau d'URLs d'images
     },
 
     // =========================
-    // 7. DOCUMENTS EXPORT & CERTIFS
+    // 7. CERTIFICATIONS & RÉCOMPENSES
+    // =========================
+    certifications: [String],
+
+    recompenses: [
+      {
+        concours: String,
+        prix: String,
+        categorie: String,
+        annee: String,
+      },
+    ],
+
+    // =========================
+    // 8. DOCUMENTS EXPORT
     // =========================
     documentsExport: {
-      certificatOrigine: String,
+      certificatOrigine: String, // Stocke l'URL
       certificatBio: String,
       certificatSanitaire: String,
       certificatPhytosanitaire: String,
       coa: String,
       ficheTechnique: String,
+      ficheSecurite: String,
+      analyseMigrationEmballage: String,
     },
-    certifications: [String], // ["ISO 22000", "HACCP", "Halal", "AOP"]
-    recompenses: [
-      {
-        concours: String,
-        prix: String,
-        annee: String,
-      },
-    ],
 
+    // =========================
+    // 9. SYSTÈME DE CONFIANCE
+    // =========================
+    verification: {
+      isSellerVerified: { type: Boolean, default: false },
+      isAnalysisValidated: { type: Boolean, default: false },
+    },
     status: {
       type: String,
       enum: ["En attente de validation", "Validé", "Disponible", "Rejeté"],
